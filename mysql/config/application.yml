@@ -1,0 +1,36 @@
+## Server properties
+server:
+  port: 8080
+
+## Primary/Target Database Properties
+spring:
+  application:
+    name: debezium-with-mysql
+  datasource:
+    url: jdbc:mysql://localhost:3306/customerdb
+    username: root
+    password: debezium
+  jpa.hibernate.ddl-auto: create-drop
+  jpa.show-sql: true
+
+## Source Database Properties
+customer:
+  datasource:
+    host: localhost
+    port: 3305
+    database: customerdb
+    username: root
+    password: debezium
+
+ ## Logging properties
+logging:
+  level:
+    root: INFO
+    io:
+      debezium:
+        mysql:
+          BinlogReader: INFO
+    com:
+      baeldung:
+        libraries:
+          debezium: DEBUG
