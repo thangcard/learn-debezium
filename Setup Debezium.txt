@@ -1,0 +1,258 @@
+--------------------------------------------------------------------------------------
+>>>>> REPLICATION >>>>> https://docs.mongodb.com/manual/tutorial/deploy-replica-set/
+--------------------------------------------------------------------------------------
++ Tất cả các member trong replica set phải cùng phiên bản mongodb, nếu cài qua docker cần sử đụng đúng image
+    docker pull mongo:4.4.6
+
++ Check Oplog Status
+    rs.printReplicationInfo()
+    -> To view oplog status, including the size and the time range of operations.
+
++ Replication Lag and Flow Control
+    db.getReplicationInfo()
+    -> Under various exceptional situations, updates to a secondary's oplog might lag behind the desired performance time. 
+    Use db.getReplicationInfo() from a secondary member and the replication status output to assess the current state of 
+    replication and determine if there is any unintended replication delay.
+
++ Starting in version 4.2.1, rs.status() returns majorityVoteCount for the replica set
+
++ Tạo file cấu hình mongod.conf
+    Basic configuration: https://docs.mongodb.com/manual/administration/configuration/#configure-the-database\
+    Chú ý: có file mẫu để sẵn trong git repo
+
++ Tạo keyfile
+    openssl rand -base64 756 > <path-to-keyfile>
+    openssl rand -base64 756 > mongodb.key
+    Thay đổi quyền của file:
+    chown 999:999 mongodb.key
+    chmod -r mongodb.key
+    chmod u+r mongodb.key
+    -> chú ý: quyền sau khi check file phải như sau:
+    ls -l
+    -r-------- 1 mongodb mongodb 1024 Nov  3 07:50 mongodb.key
+
++ Cài đặt mongodb với docker:
+    docker run -d -it \
+    -v /root/mongod.conf:/etc/mongod.conf \
+    -v /root/mongodb.key:/etc/mongodb.key \
+    -p 27017:27017 --name cctv-mongo \
+    -e MONGO_MAJOR=4.4 \
+    -e MONGO_VERSION=4.4.6 \
+    -e MONGO_INITDB_ROOT_USERNAME=cctv \
+    -e MONGO_INITDB_ROOT_PASSWORD=cctv@123 \
+    -e MONGO_INITDB_DATABASE=cctv \
+    mongo:4.4.6 -f /etc/mongod.conf
+
+    docker run -d -it -p 27018:27017 --name vms-ai-mongo \
+    -e MONGO_MAJOR=4.4 \
+    -e MONGO_VERSION=4.4.6 \
+    -e MONGO_INITDB_ROOT_USERNAME=cctv \
+    -e MONGO_INITDB_ROOT_PASSWORD=cctv@123 \
+    -e MONGO_INITDB_DATABASE=vms_ai \
+    mongo:4.4.6
+
+    hoặc câu lệnh sau nếu muốn folder data nằm bên ngoài docker
+
+    docker run -d -it -p 27017:27017 --name cctv-mongo \
+    -e MONGO_INITDB_ROOT_USERNAME=cctv \
+    -e MONGO_INITDB_ROOT_PASSWORD=cctv@123 \
+    -e MONGO_INITDB_DATABASE=cctv \
+    -v mongodb:/data/db \
+    -v /etc/mongod-docker.conf:/etc/mongod.conf \
+    -v /etc/mongodb.key:/etc/mongodb.key \
+    mongo:4.4.6 --config /etc/mongod.conf
+
++ check log:
+    docker logs <id của mongodb instance>
+
++ Install nano or vim editor
+    Docker images are delivered trimmed to the bare minimum - so no editor is installed with the shipped container. That's why there's a need to install it manually
+    
+    -> CentOS:
+    apt-get update
+    apt-get install vim
+    apt-get install nano
+
+    -> Linux:
+    apk add --update nano
+
++ Trường hợp mongodb đã cài sẵn từ trước với docker thì cần làm như sau:
+    1. Tạo file mongod.conf ở root:
+    vi /root/mongod.conf
+    cấu hình default lấy ở đây: https://docs.mongodb.com/manual/administration/configuration/#configure-the-database
+    chú ý là bỏ tham số 
+        processManagement:
+            fork: true
+
+    2. Sửa file cấu hình của docker container:
+    cd /var/lib/docker/containers/<id của mongodb instance>/
+
+    Tìm file config.v2.json và thêm hai đoạn sau: 
+    "Args":["--config","/etc/mongod.conf"]
+    "/etc/mongod.conf":{"Source":"/root/mongod.conf","Destination":"/etc/mongod.conf","RW":true,"Name":"","Driver":"","Type":"bind","Propagation":"rprivate","Spec":{"Type":"bind","Source":"/root/mongod.conf","Target":"/etc/mongod.conf"},"SkipMountpointCreation":false}
+    Ví dụ:
+    {"StreamConfig":{},"State":{"Running":false,"Paused":false,"Restarting":false,"OOMKilled":false,"RemovalInProgress":false,"Dead":false,"Pid":0,"ExitCode":100,"Error":"","StartedAt":"2021-11-03T02:35:06.010954895Z","FinishedAt":"2021-11-03T02:35:09.878662313Z","Health":null},"ID":"919ffcafe982fedde6efa91273a09bfe038c02d769d1342eee64bc2fbd6e6c49","Created":"2021-11-02T11:04:34.224104478Z","Managed":false,"Path":"docker-entrypoint.sh","Args":["--config","/etc/mongod.conf"],"Config":{"Hostname":"919ffcafe982","Domainname":"","User":"","AttachStdin":false,"AttachStdout":false,"AttachStderr":false,"ExposedPorts":{"27017/tcp":{}},"Tty":true,"OpenStdin":true,"StdinOnce":false,"Env":["MONGO_INITDB_DATABASE=cctv","MONGO_INITDB_ROOT_USERNAME=cctv","MONGO_INITDB_ROOT_PASSWORD=cctv@123","PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin","GOSU_VERSION=1.12","JSYAML_VERSION=3.13.1","MONGO_PACKAGE=mongodb-org","MONGO_REPO=repo.mongodb.org","MONGO_MAJOR=4.4","MONGO_VERSION=4.4.6"],"Cmd":["mongod"],"Image":"mongo","Volumes":{"/data/configdb":{},"/data/db":{}},"WorkingDir":"","Entrypoint":["docker-entrypoint.sh"],"OnBuild":null,"Labels":{}},"Image":"sha256:0e120e3fce9ae7e798cdf515db8124b20691ab8805487ddbb2c6bff217a9a109","NetworkSettings":{"Bridge":"","SandboxID":"f63f8367a880646bd727d6711095c3be7c1261f3f49398d7ff6c07429b686e1f","HairpinMode":false,"LinkLocalIPv6Address":"","LinkLocalIPv6PrefixLen":0,"Networks":{"bridge":{"IPAMConfig":null,"Links":null,"Aliases":null,"NetworkID":"9c54fbccf3cfda4551224d9027a225ae8ff8442e2344bb5fef51781e7a8c35c4","EndpointID":"","Gateway":"","IPAddress":"","IPPrefixLen":0,"IPv6Gateway":"","GlobalIPv6Address":"","GlobalIPv6PrefixLen":0,"MacAddress":"","DriverOpts":null,"IPAMOperational":false}},"Service":null,"Ports":null,"SandboxKey":"/var/run/docker/netns/f63f8367a880","SecondaryIPAddresses":null,"SecondaryIPv6Addresses":null,"IsAnonymousEndpoint":false,"HasSwarmEndpoint":false},"LogPath":"/var/lib/docker/containers/919ffcafe982fedde6efa91273a09bfe038c02d769d1342eee64bc2fbd6e6c49/919ffcafe982fedde6efa91273a09bfe038c02d769d1342eee64bc2fbd6e6c49-json.log","Name":"/cctv-mongo","Driver":"overlay2","OS":"linux","MountLabel":"","ProcessLabel":"","RestartCount":0,"HasBeenStartedBefore":true,"HasBeenManuallyStopped":false,"MountPoints":{"/data/configdb":{"Source":"","Destination":"/data/configdb","RW":true,"Name":"8c2e95a3592407712bcecd44a134d3c936f5172ac7a7f8498e3c643208beb794","Driver":"local","Type":"volume","Spec":{},"SkipMountpointCreation":false},"/data/db":{"Source":"","Destination":"/data/db","RW":true,"Name":"7d2d1a91f233e2b9203ed9618eb4c50392abf8b23f323e5c1a1a946e128cbc9c","Driver":"local","Type":"volume","Spec":{},"SkipMountpointCreation":false},"/etc/mongod.conf":{"Source":"/root/mongod.conf","Destination":"/etc/mongod.conf","RW":true,"Name":"","Driver":"","Type":"bind","Propagation":"rprivate","Spec":{"Type":"bind","Source":"/root/mongod.conf","Target":"/etc/mongod.conf"},"SkipMountpointCreation":false}},"SecretReferences":null,"ConfigReferences":null,"AppArmorProfile":"docker-default","HostnamePath":"/var/lib/docker/containers/919ffcafe982fedde6efa91273a09bfe038c02d769d1342eee64bc2fbd6e6c49/hostname","HostsPath":"/var/lib/docker/containers/919ffcafe982fedde6efa91273a09bfe038c02d769d1342eee64bc2fbd6e6c49/hosts","ShmPath":"","ResolvConfPath":"/var/lib/docker/containers/919ffcafe982fedde6efa91273a09bfe038c02d769d1342eee64bc2fbd6e6c49/resolv.conf","SeccompProfile":"","NoNewPrivileges":false,"LocalLogCacheMeta":{"HaveNotifyEnabled":false}}
+
+    Tìm file hostconfig.json và thêm đoạn sau:
+    "Binds":["/root/mongod.conf:/etc/mongod.conf"]
+    Ví dụ:
+    {"Binds":["/root/mongod.conf:/etc/mongod.conf"],"ContainerIDFile":"","LogConfig":{"Type":"json-file","Config":{"max-size":"100m"}},"NetworkMode":"default","PortBindings":{"27017/tcp":[{"HostIp":"","HostPort":"27017"}]},"RestartPolicy":{"Name":"no","MaximumRetryCount":0},"AutoRemove":false,"VolumeDriver":"","VolumesFrom":null,"CapAdd":null,"CapDrop":null,"CgroupnsMode":"host","Dns":[],"DnsOptions":[],"DnsSearch":[],"ExtraHosts":null,"GroupAdd":null,"IpcMode":"private","Cgroup":"","Links":null,"OomScoreAdj":0,"PidMode":"","Privileged":false,"PublishAllPorts":false,"ReadonlyRootfs":false,"SecurityOpt":null,"UTSMode":"","UsernsMode":"","ShmSize":67108864,"Runtime":"runc","ConsoleSize":[0,0],"Isolation":"","CpuShares":0,"Memory":0,"NanoCpus":0,"CgroupParent":"","BlkioWeight":0,"BlkioWeightDevice":[],"BlkioDeviceReadBps":null,"BlkioDeviceWriteBps":null,"BlkioDeviceReadIOps":null,"BlkioDeviceWriteIOps":null,"CpuPeriod":0,"CpuQuota":0,"CpuRealtimePeriod":0,"CpuRealtimeRuntime":0,"CpusetCpus":"","CpusetMems":"","Devices":[],"DeviceCgroupRules":null,"DeviceRequests":null,"KernelMemory":0,"KernelMemoryTCP":0,"MemoryReservation":0,"MemorySwap":0,"MemorySwappiness":null,"OomKillDisable":false,"PidsLimit":null,"Ulimits":null,"CpuCount":0,"CpuPercent":0,"IOMaximumIOps":0,"IOMaximumBandwidth":0,"MaskedPaths":["/proc/asound","/proc/acpi","/proc/kcore","/proc/keys","/proc/latency_stats","/proc/timer_list","/proc/timer_stats","/proc/sched_debug","/proc/scsi","/sys/firmware"],"ReadonlyPaths":["/proc/bus","/proc/fs","/proc/irq","/proc/sys","/proc/sysrq-trigger"]}
+
+    3. Khởi động lại docker
+    sudo systemctl restart docker
+
++ Initiate the replica set
+    From mongosh, run rs.initiate() on replica set member 0. MongoDB initiates a replica set, using the default replica set configuration.
+    rs.initiate() triggers an election and elects one of the members to be the primary.
+    Note: Run rs.initiate() on just one and only one mongod instance for the replica set.
+
+    rs.initiate( {
+        _id : "rs0",
+        members: [
+            { _id: 0, host: "10.0.0.63:27017" },
+            { _id: 1, host: "10.0.0.64:27017" },
+            { _id: 2, host: "10.0.10.34:27017" }
+        ]
+    })
+
++ Create the user administrator
+    Add a user using the db.createUser() method. The user should have at minimum the userAdminAnyDatabase role on the admin database.
+    You must be connected to the primary to create users.
+
+    admin = db.getSiblingDB("admin")
+    admin.createUser(
+        {
+            user: "admin",
+            pwd: passwordPrompt(),
+            roles: [ { role: "root", db: "admin" } ]
+        }
+    )
+    db.grantRolesToUser("admin",[ "root" ])
+
++ Get current user information
+    db.runCommand({connectionStatus : 1})
+
++ Get list of users
+    db.getUsers()
+
++ Authenticate as the user administrator
+    Authenticate to the admin database. In mongosh, use db.auth() to authenticate
+
+    -> db.getSiblingDB("admin").auth("cctv", passwordPrompt())
+
+    Alternatively, connect a new mongosh instance to the primary replica set member using the -u <username>, -p <password>, and the --authenticationDatabase parameters.
+    If you do not specify the password to the -p command-line option, mongosh prompts for the password.
+
+    -> mongosh -u "cctv" -p "cctv@123" --authenticationDatabase "admin"
+
++ Create additional users (Optional)
+    Create users to allow clients to connect and interact with the replica set
+
+    db.getSiblingDB("cctv").createUser(
+        {
+            "user" : "cctv",
+            "pwd" : passwordPrompt(),
+            roles: [ { "role" : "read", "db" : "cctv" }, { "role" : "readWrite", "db" : "cctv" } ]
+        }
+    )
+
+
++ View the replica set configuration
+    rs.conf()
+
++ Ensure that the replica set has a primary
+    rs.status()
+    -> Use  to locate the primary member.
+
+--------------------------------------------------------------------------------------
+>>>>> DEBEZIUM >>>>> 
+Tutorial: https://debezium.io/documentation/reference/1.7/tutorial.html#starting-zookeeper
+Setup: https://debezium.io/documentation/reference/1.7/connectors/mongodb.html
+--------------------------------------------------------------------------------------
+
++ Starting Zookeeper
+    docker run -it --name zookeeper -p 2181:2181 -p 2888:2888 -p 3888:3888 debezium/zookeeper:1.7
+
++ Starting Kafka
+    docker run -it --name kafka -p 9092:9092 -e ADVERTISED_HOST_NAME=10.0.0.63 --link zookeeper:zookeeper debezium/kafka:1.7
+
+    # NOTE: In this tutorial, you will always connect to Kafka from within a Docker container. 
+    Any of these containers can communicate with the kafka container by linking to it. If you needed to connect to Kafka from outside of a Docker container, 
+    you would have to set the -e option to advertise the Kafka address through the Docker host (-e ADVERTISED_HOST_NAME= followed by either the IP address or resolvable host name of the Docker host).
+    
+    # To change config:
+    docker cp kafka:/kafka/config/server.properties .
+    -> copy file from container to current directory
+    docker cp server.properties kafka:/kafka/config/server.properties
+    -> copy file from current directory to container
+
++ Starting Kafka Connect
+    docker run -it --name connect -p 14001:8083 \
+        -e GROUP_ID=1 -e CONFIG_STORAGE_TOPIC=cctv_connect_configs \
+        -e OFFSET_STORAGE_TOPIC=cctv_connect_offsets \
+        -e STATUS_STORAGE_TOPIC=cctv_connect_statuses \
+        --link zookeeper:zookeeper --link kafka:kafka --link cctv-mongo:cctv-mongo debezium/connect:1.7
+
+    -> Remember the docker port publishing format of <public port>:<container port>. 
+    -> The --link flag takes the form: --link <name or id>:alias
+    -> If you provide a --hostname command option then Kafka Connect REST API will not listen on the localhost interface. This can cause issues when the REST port is being exposed.
+    -> If this is a problem then set environment variable REST_HOST_NAME=0.0.0.0 which will ensure that REST API will be accessible from all interfaces.
+
++ Use the Kafka Connect REST API to check the status of the Kafka Connect service
+
+    Open a new terminal and check the status of the Kafka Connect service:
+    $ curl -H "Accept:application/json" 10.0.0.63:14001/
+
+    Check the list of connectors registered with Kafka Connect:
+    $ curl -H "Accept:application/json" 10.0.0.63:14001/connectors/
+
++ Registering a connector to monitor the cctv database
+    You can send this configuration with a POST command to a running Kafka Connect service.
+
+    $ curl -i -X POST -H "Accept:application/json" -H "Content-Type:application/json" 10.0.0.63:14001/connectors/ -d '<json_content>'
+
+    {
+        "name": "cctv-connector", 
+        "config": {
+            "connector.class": "io.debezium.connector.mongodb.MongoDbConnector", 
+            "mongodb.hosts": "rs0/10.0.0.63:27017", 
+            "mongodb.user": "admin",
+            "mongodb.password": "cctv@123",
+            "mongodb.name": "dbserver1",
+            "database.include.list": "cctv",
+            "collection.include.list": "" 
+        }
+    }
+
+    mongodb.name
+    -> The logical name of the MongoDB replica set, which forms a namespace for generated events and is used in all the names of the Kafka topics to which the connector writes.
+    collection.include.list
+    -> A list of regular expressions that match the collection namespaces (for example, <dbName>.<collectionName>) of all collections to be monitored. This is optional.
+
++ Review the connector’s tasks:
+    $ curl -i -X GET -H "Accept:application/json" 10.0.0.63:14001/connectors/cctv-connector
+
++ Start the watch-topic utility to watch the dbserver1.cctv.provinces topic
+    The watch-topic utility is very simple and limited in functionality. It is not intended to be used by an application to consume events. 
+    In that scenario, you would instead use Kafka consumers and the applicable consumer libraries that offer full functionality and flexibility.
+
+    docker run -it --name watcher --link zookeeper:zookeeper --link kafka:kafka debezium/kafka:1.7 watch-topic -a -k dbserver1.cctv.provinces
+
++ List topic
+    bin/kafka-topics.sh --list --zookeeper 10.0.0.63:2181
+
++ Describe topic
+    bin/kafka-topics.sh --topic dbserver1.cctv.provinces --describe --zookeeper 10.0.0.63:2181
+
+--------------------------------------------------------------------------------------
+>>>>> UI for Apache Kafka >>>>> 
+Document: https://github.com/provectus/kafka-ui
+--------------------------------------------------------------------------------------
+
+docker run --name kafka-ui -p 8080:8080 \
+	-e KAFKA_CLUSTERS_0_NAME=local \
+	-e KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=10.0.0.63:9092 \
+	-d provectuslabs/kafka-ui:master 
+
+Có thể pull từ repo của công ty cho nhanh nếu mạng chậm: repo.edsolabs.com
+docker run --name kafka-ui -p 8080:8080 -e KAFKA_CLUSTERS_0_NAME=local -e KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=10.0.0.63:9092 -d repo.edsolabs.com/provectuslabs/kafka-ui:master
