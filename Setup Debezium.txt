@@ -25,24 +25,23 @@
     openssl rand -base64 756 > mongodb.key
     Thay đổi quyền của file:
     chown 999:999 mongodb.key
-    chmod -r mongodb.key
+    chmod -r-w mongodb.key
     chmod u+r mongodb.key
     -> chú ý: quyền sau khi check file phải như sau:
     ls -l
     -r-------- 1 mongodb mongodb 1024 Nov  3 07:50 mongodb.key
 
-+ Cài đặt mongodb với docker:
++ Cài đặt mongodb với docker ở 3 server khác nhau:
     docker run -d -it \
     -v /root/mongod.conf:/etc/mongod.conf \
     -v /root/mongodb.key:/etc/mongodb.key \
     -p 27017:27017 --name cctv-mongo \
     -e MONGO_MAJOR=4.4 \
     -e MONGO_VERSION=4.4.6 \
-    -e MONGO_INITDB_ROOT_USERNAME=cctv \
-    -e MONGO_INITDB_ROOT_PASSWORD=cctv@123 \
     -e MONGO_INITDB_DATABASE=cctv \
     mongo:4.4.6 -f /etc/mongod.conf
 
++ Cài đặt db cho vms-ai:
     docker run -d -it -p 27018:27017 --name vms-ai-mongo \
     -e MONGO_MAJOR=4.4 \
     -e MONGO_VERSION=4.4.6 \
@@ -51,16 +50,16 @@
     -e MONGO_INITDB_DATABASE=vms_ai \
     mongo:4.4.6
 
-    hoặc câu lệnh sau nếu muốn folder data nằm bên ngoài docker
-
-    docker run -d -it -p 27017:27017 --name cctv-mongo \
-    -e MONGO_INITDB_ROOT_USERNAME=cctv \
-    -e MONGO_INITDB_ROOT_PASSWORD=cctv@123 \
++ Dùng câu lệnh sau nếu muốn folder data nằm bên ngoài docker
+    docker run -d -it \
+    -v /root/mongod.conf:/etc/mongod.conf \
+    -v /root/mongodb.key:/etc/mongodb.key \
+    -v /opt/cctvdb:/data/db \
+    -p 27017:27017 --name cctv-mongo \
+    -e MONGO_MAJOR=4.4 \
+    -e MONGO_VERSION=4.4.6 \
     -e MONGO_INITDB_DATABASE=cctv \
-    -v mongodb:/data/db \
-    -v /etc/mongod-docker.conf:/etc/mongod.conf \
-    -v /etc/mongodb.key:/etc/mongodb.key \
-    mongo:4.4.6 --config /etc/mongod.conf
+    mongo:4.4.6 -f /etc/mongod.conf
 
 + check log:
     docker logs <id của mongodb instance>
@@ -83,23 +82,44 @@
     chú ý là bỏ tham số 
         processManagement:
             fork: true
+    <<file mẫu đã có lưu trong repo>>
+
+    2. Stop docker <<Chú ý là phải stop thì mới có thể sửa được file cấu hình, nếu không sẽ bị load lại file cũ>>
+    docker stop $(docker ps -aq)
+    -> stop tất cả các container
+    systemctl stop docker docker.socket
+    -> stop docker
 
     2. Sửa file cấu hình của docker container:
     cd /var/lib/docker/containers/<id của mongodb instance>/
 
-    Tìm file config.v2.json và thêm hai đoạn sau: 
+    Tìm file config.v2.json và thêm ba đoạn sau <<Có thể so sánh với file mẫu trong repo để tìm hai đoạn này>> 
+    "Args":["-f","/etc/mongod.conf"]
+    "Cmd":["-f","/etc/mongod.conf"]
+    Đối tượng MountPoints thêm:
+    ,"/etc/mongod.conf":{"Source":"/root/mongod.conf","Destination":"/etc/mongod.conf","RW":true,"Name":"","Driver":"","Type":"bind","Propagation":"rprivate","Spec":{"Type":"bind","Source":"/root/mongod.conf","Target":"/etc/mongod.conf"},"SkipMountpointCreation":false},"/etc/mongodb.key":{"Source":"/root/mongodb.key","Destination":"/etc/mongodb.key","RW":true,"Name":"","Driver":"","Type":"bind","Propagation":"rprivate","Spec":{"Type":"bind","Source":"/root/mongodb.key","Target":"/etc/mongodb.key"},"SkipMountpointCreation":false}
+
     "Args":["--config","/etc/mongod.conf"]
-    "/etc/mongod.conf":{"Source":"/root/mongod.conf","Destination":"/etc/mongod.conf","RW":true,"Name":"","Driver":"","Type":"bind","Propagation":"rprivate","Spec":{"Type":"bind","Source":"/root/mongod.conf","Target":"/etc/mongod.conf"},"SkipMountpointCreation":false}
-    Ví dụ:
-    {"StreamConfig":{},"State":{"Running":false,"Paused":false,"Restarting":false,"OOMKilled":false,"RemovalInProgress":false,"Dead":false,"Pid":0,"ExitCode":100,"Error":"","StartedAt":"2021-11-03T02:35:06.010954895Z","FinishedAt":"2021-11-03T02:35:09.878662313Z","Health":null},"ID":"919ffcafe982fedde6efa91273a09bfe038c02d769d1342eee64bc2fbd6e6c49","Created":"2021-11-02T11:04:34.224104478Z","Managed":false,"Path":"docker-entrypoint.sh","Args":["--config","/etc/mongod.conf"],"Config":{"Hostname":"919ffcafe982","Domainname":"","User":"","AttachStdin":false,"AttachStdout":false,"AttachStderr":false,"ExposedPorts":{"27017/tcp":{}},"Tty":true,"OpenStdin":true,"StdinOnce":false,"Env":["MONGO_INITDB_DATABASE=cctv","MONGO_INITDB_ROOT_USERNAME=cctv","MONGO_INITDB_ROOT_PASSWORD=cctv@123","PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin","GOSU_VERSION=1.12","JSYAML_VERSION=3.13.1","MONGO_PACKAGE=mongodb-org","MONGO_REPO=repo.mongodb.org","MONGO_MAJOR=4.4","MONGO_VERSION=4.4.6"],"Cmd":["mongod"],"Image":"mongo","Volumes":{"/data/configdb":{},"/data/db":{}},"WorkingDir":"","Entrypoint":["docker-entrypoint.sh"],"OnBuild":null,"Labels":{}},"Image":"sha256:0e120e3fce9ae7e798cdf515db8124b20691ab8805487ddbb2c6bff217a9a109","NetworkSettings":{"Bridge":"","SandboxID":"f63f8367a880646bd727d6711095c3be7c1261f3f49398d7ff6c07429b686e1f","HairpinMode":false,"LinkLocalIPv6Address":"","LinkLocalIPv6PrefixLen":0,"Networks":{"bridge":{"IPAMConfig":null,"Links":null,"Aliases":null,"NetworkID":"9c54fbccf3cfda4551224d9027a225ae8ff8442e2344bb5fef51781e7a8c35c4","EndpointID":"","Gateway":"","IPAddress":"","IPPrefixLen":0,"IPv6Gateway":"","GlobalIPv6Address":"","GlobalIPv6PrefixLen":0,"MacAddress":"","DriverOpts":null,"IPAMOperational":false}},"Service":null,"Ports":null,"SandboxKey":"/var/run/docker/netns/f63f8367a880","SecondaryIPAddresses":null,"SecondaryIPv6Addresses":null,"IsAnonymousEndpoint":false,"HasSwarmEndpoint":false},"LogPath":"/var/lib/docker/containers/919ffcafe982fedde6efa91273a09bfe038c02d769d1342eee64bc2fbd6e6c49/919ffcafe982fedde6efa91273a09bfe038c02d769d1342eee64bc2fbd6e6c49-json.log","Name":"/cctv-mongo","Driver":"overlay2","OS":"linux","MountLabel":"","ProcessLabel":"","RestartCount":0,"HasBeenStartedBefore":true,"HasBeenManuallyStopped":false,"MountPoints":{"/data/configdb":{"Source":"","Destination":"/data/configdb","RW":true,"Name":"8c2e95a3592407712bcecd44a134d3c936f5172ac7a7f8498e3c643208beb794","Driver":"local","Type":"volume","Spec":{},"SkipMountpointCreation":false},"/data/db":{"Source":"","Destination":"/data/db","RW":true,"Name":"7d2d1a91f233e2b9203ed9618eb4c50392abf8b23f323e5c1a1a946e128cbc9c","Driver":"local","Type":"volume","Spec":{},"SkipMountpointCreation":false},"/etc/mongod.conf":{"Source":"/root/mongod.conf","Destination":"/etc/mongod.conf","RW":true,"Name":"","Driver":"","Type":"bind","Propagation":"rprivate","Spec":{"Type":"bind","Source":"/root/mongod.conf","Target":"/etc/mongod.conf"},"SkipMountpointCreation":false}},"SecretReferences":null,"ConfigReferences":null,"AppArmorProfile":"docker-default","HostnamePath":"/var/lib/docker/containers/919ffcafe982fedde6efa91273a09bfe038c02d769d1342eee64bc2fbd6e6c49/hostname","HostsPath":"/var/lib/docker/containers/919ffcafe982fedde6efa91273a09bfe038c02d769d1342eee64bc2fbd6e6c49/hosts","ShmPath":"","ResolvConfPath":"/var/lib/docker/containers/919ffcafe982fedde6efa91273a09bfe038c02d769d1342eee64bc2fbd6e6c49/resolv.conf","SeccompProfile":"","NoNewPrivileges":false,"LocalLogCacheMeta":{"HaveNotifyEnabled":false}}
+    "/etc/mongod.conf":{"Source":"/root/mongod.conf","Destination":"/etc/mongod.conf","RW":true,"Name":"","Driver":"","Type":"bind","Propagation":"rprivate","Spec":{"Type":"bind","Source":"/root/mongod.conf","Target":"/etc/mongod.conf"},"SkipMountpointCreation":false}    
 
     Tìm file hostconfig.json và thêm đoạn sau:
-    "Binds":["/root/mongod.conf:/etc/mongod.conf"]
-    Ví dụ:
-    {"Binds":["/root/mongod.conf:/etc/mongod.conf"],"ContainerIDFile":"","LogConfig":{"Type":"json-file","Config":{"max-size":"100m"}},"NetworkMode":"default","PortBindings":{"27017/tcp":[{"HostIp":"","HostPort":"27017"}]},"RestartPolicy":{"Name":"no","MaximumRetryCount":0},"AutoRemove":false,"VolumeDriver":"","VolumesFrom":null,"CapAdd":null,"CapDrop":null,"CgroupnsMode":"host","Dns":[],"DnsOptions":[],"DnsSearch":[],"ExtraHosts":null,"GroupAdd":null,"IpcMode":"private","Cgroup":"","Links":null,"OomScoreAdj":0,"PidMode":"","Privileged":false,"PublishAllPorts":false,"ReadonlyRootfs":false,"SecurityOpt":null,"UTSMode":"","UsernsMode":"","ShmSize":67108864,"Runtime":"runc","ConsoleSize":[0,0],"Isolation":"","CpuShares":0,"Memory":0,"NanoCpus":0,"CgroupParent":"","BlkioWeight":0,"BlkioWeightDevice":[],"BlkioDeviceReadBps":null,"BlkioDeviceWriteBps":null,"BlkioDeviceReadIOps":null,"BlkioDeviceWriteIOps":null,"CpuPeriod":0,"CpuQuota":0,"CpuRealtimePeriod":0,"CpuRealtimeRuntime":0,"CpusetCpus":"","CpusetMems":"","Devices":[],"DeviceCgroupRules":null,"DeviceRequests":null,"KernelMemory":0,"KernelMemoryTCP":0,"MemoryReservation":0,"MemorySwap":0,"MemorySwappiness":null,"OomKillDisable":false,"PidsLimit":null,"Ulimits":null,"CpuCount":0,"CpuPercent":0,"IOMaximumIOps":0,"IOMaximumBandwidth":0,"MaskedPaths":["/proc/asound","/proc/acpi","/proc/kcore","/proc/keys","/proc/latency_stats","/proc/timer_list","/proc/timer_stats","/proc/sched_debug","/proc/scsi","/sys/firmware"],"ReadonlyPaths":["/proc/bus","/proc/fs","/proc/irq","/proc/sys","/proc/sysrq-trigger"]}
+    "Binds":["/root/mongodb.key:/etc/mongodb.key","/root/mongod.conf:/etc/mongod.conf"]
 
-    3. Khởi động lại docker
-    sudo systemctl restart docker
+    3. Bật lại docker
+    systemctl start docker docker.socket
+
+    4. Ghi chú:
+    Xử lý lỗi: /tmp/mongodb-27017.sock","error":"Operation not permitted
+    + docker inspect cctv-mongo
+    sau đó tìm cấu hình: GraphDriver -> Data -> LowerDir -> 
+        "UpperDir": "/data/docker/overlay2/bbd73e5d711dba3ef265d89e693c71ef1c1501678f1c66eff3623cf3cb4bfef3/diff",
+    trong thư mục diff này tìm thư mục tmp và xóa file mongodb-27017.sock
+    câu lệnh xóa: rm -rf mongodb-27017.sock
+    (trước khi xóa cần stop docker với câu lệnh: systemctl stop docker docker.socket)
+
++ Thêm member vào replica set
+    https://docs.mongodb.com/manual/tutorial/expand-replica-set/
+
 
 + Initiate the replica set
     From mongosh, run rs.initiate() on replica set member 0. MongoDB initiates a replica set, using the default replica set configuration.
@@ -109,9 +129,9 @@
     rs.initiate( {
         _id : "rs0",
         members: [
-            { _id: 0, host: "10.0.0.63:27017" },
-            { _id: 1, host: "10.0.0.64:27017" },
-            { _id: 2, host: "10.0.10.34:27017" }
+            { _id: 0, host: "10.0.0.62:27017" },
+            { _id: 1, host: "10.0.10.34:27017" },
+            { _id: 2, host: "10.0.10.35:27017" }
         ]
     })
 
@@ -127,27 +147,24 @@
             roles: [ { role: "root", db: "admin" } ]
         }
     )
+
++ Nếu cần gán quyền gì khác thì dùng câu lệnh sau:
+    db.getSiblingDB("admin").auth("admin", passwordPrompt())
+    hoặc
+    use admin
+    db.auth("admin", passwordPrompt())
+
     db.grantRolesToUser("admin",[ "root" ])
+    db.grantRolesToUser("admin",[ { role: "root", db: "admin" } ])
 
 + Get current user information
     db.runCommand({connectionStatus : 1})
 
 + Get list of users
+    use cctv
     db.getUsers()
 
-+ Authenticate as the user administrator
-    Authenticate to the admin database. In mongosh, use db.auth() to authenticate
-
-    -> db.getSiblingDB("admin").auth("cctv", passwordPrompt())
-
-    Alternatively, connect a new mongosh instance to the primary replica set member using the -u <username>, -p <password>, and the --authenticationDatabase parameters.
-    If you do not specify the password to the -p command-line option, mongosh prompts for the password.
-
-    -> mongosh -u "cctv" -p "cctv@123" --authenticationDatabase "admin"
-
-+ Create additional users (Optional)
-    Create users to allow clients to connect and interact with the replica set
-
++ Tạo user dùng cho clients:
     db.getSiblingDB("cctv").createUser(
         {
             "user" : "cctv",
@@ -156,13 +173,31 @@
         }
     )
 
-
 + View the replica set configuration
     rs.conf()
 
 + Ensure that the replica set has a primary
     rs.status()
     -> Use  to locate the primary member.
+
++ Thiết lập mặc định một member là primary
+    db.getSiblingDB("admin").auth("admin", passwordPrompt())
+    -> đăng nhập với admin
+    
+    cfg = rs.conf()
+    -> lấy thông tin cấu hình, chú ý xem kết quả trả về để biết member nào đang là primary
+    
+    cfg.members[0].priority = 1
+    cfg.members[1].priority = 0
+    cfg.members[2].priority = 0
+    -> Gán priority cho 3 member theo mong muốn
+
+    rs.stepDown(120)
+    -> Vào mongosh của member đang là primary sau đó ép member đó không được là primary trong 120s
+    cfg.members[id của member].priority = 0
+
+    rs.reconfig(cfg)
+    -> Cấu hình lại replica theo priority mới, lúc này member có priority là 1 sẽ thành primary
 
 --------------------------------------------------------------------------------------
 >>>>> DEBEZIUM >>>>> 
@@ -174,7 +209,7 @@ Setup: https://debezium.io/documentation/reference/1.7/connectors/mongodb.html
     docker run -it --name zookeeper -p 2181:2181 -p 2888:2888 -p 3888:3888 debezium/zookeeper:1.7
 
 + Starting Kafka
-    docker run -it --name kafka -p 9092:9092 -e ADVERTISED_HOST_NAME=10.0.0.63 --link zookeeper:zookeeper debezium/kafka:1.7
+    docker run -it --name kafka -p 9092:9092 -e ADVERTISED_HOST_NAME=10.0.0.62 --link zookeeper:zookeeper debezium/kafka:1.7
 
     # NOTE: In this tutorial, you will always connect to Kafka from within a Docker container. 
     Any of these containers can communicate with the kafka container by linking to it. If you needed to connect to Kafka from outside of a Docker container, 
@@ -201,21 +236,21 @@ Setup: https://debezium.io/documentation/reference/1.7/connectors/mongodb.html
 + Use the Kafka Connect REST API to check the status of the Kafka Connect service
 
     Open a new terminal and check the status of the Kafka Connect service:
-    $ curl -H "Accept:application/json" 10.0.0.63:14001/
+    $ curl -H "Accept:application/json" 10.0.0.62:14001/
 
     Check the list of connectors registered with Kafka Connect:
-    $ curl -H "Accept:application/json" 10.0.0.63:14001/connectors/
+    $ curl -H "Accept:application/json" 10.0.0.62:14001/connectors/
 
 + Registering a connector to monitor the cctv database
     You can send this configuration with a POST command to a running Kafka Connect service.
 
-    $ curl -i -X POST -H "Accept:application/json" -H "Content-Type:application/json" 10.0.0.63:14001/connectors/ -d '<json_content>'
+    $ curl -i -X POST -H "Accept:application/json" -H "Content-Type:application/json" 10.0.0.62:14001/connectors/ -d '<json_content>'
 
     {
         "name": "cctv-connector", 
         "config": {
             "connector.class": "io.debezium.connector.mongodb.MongoDbConnector", 
-            "mongodb.hosts": "rs0/10.0.0.63:27017", 
+            "mongodb.hosts": "rs0/10.0.0.62:27017", 
             "mongodb.user": "admin",
             "mongodb.password": "cctv@123",
             "mongodb.name": "dbserver1",
@@ -239,10 +274,10 @@ Setup: https://debezium.io/documentation/reference/1.7/connectors/mongodb.html
     docker run -it --name watcher --link zookeeper:zookeeper --link kafka:kafka debezium/kafka:1.7 watch-topic -a -k dbserver1.cctv.provinces
 
 + List topic
-    bin/kafka-topics.sh --list --zookeeper 10.0.0.63:2181
+    bin/kafka-topics.sh --list --zookeeper 10.0.0.62:2181
 
 + Describe topic
-    bin/kafka-topics.sh --topic dbserver1.cctv.provinces --describe --zookeeper 10.0.0.63:2181
+    bin/kafka-topics.sh --topic dbserver1.cctv.provinces --describe --zookeeper 10.0.0.62:2181
 
 --------------------------------------------------------------------------------------
 >>>>> UI for Apache Kafka >>>>> 
@@ -251,8 +286,8 @@ Document: https://github.com/provectus/kafka-ui
 
 docker run --name kafka-ui -p 8080:8080 \
 	-e KAFKA_CLUSTERS_0_NAME=local \
-	-e KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=10.0.0.63:9092 \
-	-d provectuslabs/kafka-ui:master 
+	-e KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=10.0.0.62:9092 \
+	-d provectuslabs/kafka-ui:master
 
 Có thể pull từ repo của công ty cho nhanh nếu mạng chậm: repo.edsolabs.com
-docker run --name kafka-ui -p 8080:8080 -e KAFKA_CLUSTERS_0_NAME=local -e KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=10.0.0.63:9092 -d repo.edsolabs.com/provectuslabs/kafka-ui:master
+docker run --name kafka-ui -p 8080:8080 -e KAFKA_CLUSTERS_0_NAME=local -e KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=10.0.0.62:9092 -d repo.edsolabs.com/provectuslabs/kafka-ui:master
